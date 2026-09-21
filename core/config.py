@@ -25,6 +25,13 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 # rather than just reacting to them after the fact.
 GEMINI_RPM = int(os.getenv("GEMINI_RPM", "12"))
 
+# How many feedback rows to send to Gemini in a single request. Batching
+# turns ~370 individual API calls into ~25, which is both far faster and
+# much friendlier to the free-tier daily request quota. Larger batches
+# use fewer requests but risk the model returning a malformed/truncated
+# array for very long prompts — 15 is a reasonable middle ground.
+GEMINI_BATCH_SIZE = int(os.getenv("GEMINI_BATCH_SIZE", "15"))
+
 # How many similar complaints in the SPIKE_WINDOW_MINUTES window
 # count as an "anomaly" worth auto-generating a ticket for.
 SPIKE_THRESHOLD = int(os.getenv("SPIKE_THRESHOLD", "5"))

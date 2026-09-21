@@ -14,7 +14,7 @@ import logging
 
 import google.generativeai as genai
 
-from core.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_RPM
+from core.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_RPM, GEMINI_BATCH_SIZE
 
 logger = logging.getLogger("ai_classifier")
 
@@ -237,3 +237,150 @@ def classify_feedback(clean_text: str, retries: int = 2) -> dict:
 
     logger.error(f"Classification failed after {attempts} attempts, using fallback. Text: {clean_text[:80]!r}")
     return dict(FALLBACK_RESULT)
+
+
+# --- Batch classification ---
+# Sends multiple rows in a single prompt instead of one call per row.
+# This is the main lever for speed and free-tier quota efficiency:
+# ~370 rows at batch size 15 is ~25 requests instead of ~370.
+
+_BATCH_PROMPT_TEMPLATE = """You are classifying multiple pieces of user feedback for a digital product.
+
+Feedback items:
+{items}
+
+Respond with ONLY a JSON array (no markdown, no explanation) with exactly {count} objects, in the SAME ORDER as the input, one object per feedback item. Each object must have exactly these fields:
+{{
+  "category": one of "Bug", "Feature Request", "Complaint", "Spam", "Praise",
+  "sentiment": one of "Positive", "Neutral", "Negative",
+  "urgency_score": integer from 1 (trivial) to 5 (critical, e.g. payment/checkout failure)
+}}
+"""
+
+
+def _extract_json_array(raw_response: str) -> list:
+    """Same idea as _extract_json, but for a JSON array response instead
+    of a single object — strips markdown fences and grabs the outermost
+    [ ... ] block in case the model added stray text around it."""
+    text = raw_response.strip()
+    text = re.sub(r"^```(json)?", "", text.strip())
+    text = re.sub(r"```$", "", text.strip())
+    text = text.strip()
+
+    match = re.search(r"\[.*\]", text, re.DOTALL)
+    if match:
+        text = match.group(0)
+
+    return json.loads(text)
+
+
+def classify_feedback_batch(clean_texts: list[str], retries: int = 2) -> list[dict]:
+    """Classifies multiple rows in ONE Gemini request. Returns a list of
+    {category, sentiment, urgency_score} dicts, same length and order as
+    clean_texts. Never raises — any failure falls back to safe defaults
+    for the whole batch, same guarantee as classify_feedback().
+
+    Empty strings are handled locally (no point spending a request slot
+    on them) and merged back into the right position afterward.
+    """
+    if not clean_texts:
+        return []
+
+    non_empty_indices = [i for i, t in enumerate(clean_texts) if t.strip()]
+    if not non_empty_indices:
+        return [dict(FALLBACK_RESULT) for _ in clean_texts]
+
+    texts_to_send = [clean_texts[i][:1000] for i in non_empty_indices]  # guard against huge inputs
+    items_text = "\n".join(f'{i + 1}. "{t}"' for i, t in enumerate(texts_to_send))
+    prompt = _BATCH_PROMPT_TEMPLATE.format(items=items_text, count=len(texts_to_send))
+    attempts = retries + 1
+
+    for attempt in range(attempts):
+        try:
+            _throttle()
+            model = _get_model()
+            response = model.generate_content(
+                prompt,
+                request_options={"timeout": 60},  # batches take longer than single-row calls
+            )
+            parsed_list = _extract_json_array(response.text)
+            results = [_validate(item) for item in parsed_list]
+
+            if len(results) != len(texts_to_send):
+                logger.warning(
+                    f"Batch returned {len(results)} results for {len(texts_to_send)} inputs "
+                    f"— padding/truncating to match."
+                )
+                if len(results) < len(texts_to_send):
+                    results += [dict(FALLBACK_RESULT) for _ in range(len(texts_to_send) - len(results))]
+                else:
+                    results = results[:len(texts_to_send)]
+
+            # merge results back into their original positions, with
+            # fallback already in place for the empty-text slots
+            full_results = [dict(FALLBACK_RESULT) for _ in clean_texts]
+            for idx, result in zip(non_empty_indices, results):
+                full_results[idx] = result
+            return full_results
+
+        except Exception as e:
+            err_str = str(e)
+            is_rate_limit = "429" in err_str or "quota" in err_str.lower() or "TooManyRequests" in type(e).__name__
+
+            logger.warning(f"Batch classification attempt {attempt + 1}/{attempts} failed: {e}")
+            if attempt < attempts - 1:
+                if is_rate_limit:
+                    wait = _extract_retry_delay(err_str)
+                    logger.info(f"  Rate limited — waiting {wait:.0f}s before retry")
+                    time.sleep(wait)
+                else:
+                    time.sleep(1.5)
+            continue
+
+    logger.error(f"Batch classification failed after {attempts} attempts, using fallback for {len(clean_texts)} items")
+    return [dict(FALLBACK_RESULT) for _ in clean_texts]
+
+
+def chunk_list(items: list, chunk_size: int) -> list[list]:
+    """Splits a list into consecutive chunks of at most chunk_size —
+    used by scripts/run_pipeline.py to build batches."""
+    return [items[i:i + chunk_size] for i in range(0, len(items), chunk_size)]
+
+
+# --- Ticket title generation ---
+# Separate from row classification: called once per DETECTED SPIKE (rare),
+# never per row, so it's cheap even on the free tier. Deliberately kept
+# out of core/anomaly_detector.py so that module stays a pure, API-free,
+# easily-testable function — this is the one "impure" AI enrichment step,
+# and it lives here alongside the other Gemini calls instead of leaking
+# into the detection logic itself.
+
+_TITLE_PROMPT_TEMPLATE = """You are a product manager writing a short, specific bug-ticket title for a cluster of similar user complaints.
+
+Sample complaints:
+{samples}
+
+Respond with ONLY the title text (no quotes, no explanation) — 3 to 8 words, specific enough to identify the actual issue. Good: "PhonePe / UPI Checkout Failures on iOS". Bad (too generic): "Payment Issue"."""
+
+
+def generate_ticket_title(sample_reviews: list[str], fallback: str) -> str:
+    """Generates a short, specific title for a detected anomaly cluster.
+    This is a nice-to-have for the dashboard — on any failure, it falls
+    back to the generic title anomaly_detector.py already produced,
+    rather than blocking ticket generation."""
+    if not sample_reviews:
+        return fallback
+
+    try:
+        _throttle()
+        model = _get_model()
+        samples_text = "\n".join(f"- {s}" for s in sample_reviews[:5])
+        prompt = _TITLE_PROMPT_TEMPLATE.format(samples=samples_text)
+        response = model.generate_content(prompt, request_options={"timeout": 20})
+        title = response.text.strip().strip('"').strip()
+        if title and len(title) < 100:
+            return title
+        return fallback
+    except Exception as e:
+        logger.warning(f"Ticket title generation failed, using generic fallback: {e}")
+        return fallback

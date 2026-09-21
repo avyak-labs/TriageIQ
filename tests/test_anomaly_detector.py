@@ -49,3 +49,26 @@ def test_praise_and_spam_never_generate_tickets():
 def test_empty_dataframe_returns_empty_list():
     df = pd.DataFrame(columns=["category", "created_at", "clean_text", "urgency_score", "source"])
     assert detect_spikes(df) == []
+
+
+def test_ticket_has_baseline_and_id_fields():
+    rows = [make_row("Bug", i * 2) for i in range(8)]
+    df = pd.DataFrame(rows)
+    tickets = detect_spikes(df, threshold=5, window_minutes=60)
+    assert len(tickets) == 1
+    ticket = tickets[0]
+    assert ticket["ticket_id"] == "TIQ-001"
+    assert "pct_above_baseline" in ticket
+    assert "source_counts" in ticket
+    assert isinstance(ticket["source_counts"], dict)
+
+
+def test_multiple_tickets_get_sequential_ids():
+    # Two separate Bug spikes far apart in time -> two tickets
+    rows = [make_row("Bug", i * 2) for i in range(8)]  # spike 1
+    rows += [make_row("Bug", 500 + i * 2) for i in range(8)]  # spike 2, much later
+    df = pd.DataFrame(rows)
+    tickets = detect_spikes(df, threshold=5, window_minutes=60)
+    assert len(tickets) == 2
+    ids = sorted(t["ticket_id"] for t in tickets)
+    assert ids == ["TIQ-001", "TIQ-002"]

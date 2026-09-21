@@ -73,19 +73,19 @@ this is the most common mistake (extra spaces, missing `?sslmode=require`).
 python -m scripts.run_pipeline
 ```
 
-This will be slow — it's calling the AI once per row, and the free
-tier limits how fast we're allowed to do that (roughly 12 requests
-per minute by default). For the full ~370-row dataset, expect this
-to take **25-30 minutes**. This is normal, not a bug.
+This will now be much faster than a naive per-row approach — the
+pipeline batches ~15 rows into each Gemini request, so the full
+~370-row dataset takes roughly **25-30 API requests total**, finishing
+in a couple of minutes rather than 30+.
 
 **Tip: test with a smaller batch first.** Before running the full
 pipeline, confirm everything works end-to-end with a quick run:
 ```bash
 python -m scripts.run_pipeline --rows 20 --spike 8
 ```
-This finishes in under 2 minutes and still includes a spike, so you
-can check the dashboard and anomaly detection work before committing
-to the full 30-minute run.
+This finishes in well under a minute and still includes a spike, so
+you can check the dashboard and anomaly detection work before
+committing to the full run.
 
 Once you're ready for the real dataset:
 ```bash
@@ -125,7 +125,7 @@ You should see:
 |---|---|
 | `Missing required environment variables` | `.env` file missing or not filled in correctly |
 | `404 ... model not found for API version` | The app should now auto-fallback to a working model and just log a warning — if you still see a hard failure, every fallback candidate is unavailable; check https://ai.google.dev/gemini-api/docs/models and set `GEMINI_MODEL=` in your `.env` to a current name |
-| `429 ... exceeded your current quota` | Normal on the free tier if you're going too fast. The pipeline already waits and retries automatically — if it keeps happening, lower `GEMINI_RPM` in `.env` (try 8 or 10) |
+| `429 ... exceeded your current quota` | Normal on the free tier if you're going too fast — much rarer now that requests are batched. If it keeps happening, lower `GEMINI_RPM` or `GEMINI_BATCH_SIZE` in `.env` |
 | Connection refused / timeout on `init_db` | Wrong `DATABASE_URL`, or Neon project is paused (free tier auto-pauses when idle — just wait a few seconds and retry) |
 | Pipeline is very slow | Normal — it's one Gemini API call per row. ~370 rows takes a few minutes |
 | Dashboard shows "No feedback data found" | You haven't run `run_pipeline` yet, or it failed partway — check the terminal logs |
