@@ -1,0 +1,18 @@
+/* App-specific overrides — Tailwind handles 99% */
+
+/* line-clamp utility (for older Tailwind compat) */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Make <details> summary not show native triangle on all browsers */
+summary::-webkit-details-marker { display: none; }
+summary::marker { display: none; }
+
+/* Smooth open animation for <details> */
+details[open] > summary .chevron {
+  transform: rotate(180deg);
+}

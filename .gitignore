@@ -9,5 +9,10 @@ venv/
 .venv/
 *.egg-info/
 
+# Frontend
+node_modules/
+frontend/dist/
+frontend/node_modules/
+
 # OS
 .DS_Store

@@ -5,24 +5,29 @@ If something doesn't look like what's described, stop and check before continuin
 
 ---
 
+## Prerequisites
+- **Python 3.11+** installed
+- **Node.js (v18+) & npm** installed (required for the React + Vite frontend)
+
+---
+
 ## 1. Create your Neon (Postgres) database
 
 1. Go to https://neon.tech and sign up (free tier is enough).
 2. Click **"Create a project"**. Give it any name, e.g. `triageiq`.
 3. Once created, go to your project's **Dashboard**.
-4. Find the **Connection String** (usually shown right on the dashboard, or
-   under "Connection Details"). It looks like:
+4. Find the **Connection String** (usually shown right on the dashboard, or under "Connection Details"). It looks like:
    ```
    postgresql://username:password@ep-something.neon.tech/dbname?sslmode=require
    ```
-5. Copy this whole string somewhere safe — you'll need it in step 4.
+5. Copy this whole string somewhere safe — you'll need it in step 5.
 
 ## 2. Get a Gemini API key
 
 1. Go to https://aistudio.google.com/apikey
 2. Sign in with a Google account.
 3. Click **"Create API key"**.
-4. Copy the key somewhere safe — you'll need it in step 4.
+4. Copy the key somewhere safe — you'll need it in step 5.
 
 ## 3. Install Python dependencies
 
@@ -36,27 +41,37 @@ python3 -m venv venv
 source venv/bin/activate        # Mac/Linux
 venv\Scripts\activate           # Windows
 
-# Install everything the project needs
+# Install everything the backend and pipelines need
 pip install -r requirements.txt
 ```
 
 You'll know it worked if the install finishes with no red error text.
-**Every time you open a new terminal to work on this project, run the
-`activate` command again first.**
+**Every time you open a new terminal to work on this project, run the `activate` command again first.**
 
-## 4. Set up your secrets file
+## 4. Install Frontend dependencies
 
-1. In the project folder, find the file `.env.example`.
+Open a terminal and navigate to the `frontend/` directory to install the React packages:
+
+```bash
+cd frontend
+npm install
+cd ..
+```
+
+This installs React 19, Vite, Tailwind CSS, Lucide icons, and Recharts.
+
+## 5. Set up your secrets file
+
+1. In the project root folder, find the file `.env.example`.
 2. Make a copy of it named exactly `.env` (no `.example`).
 3. Open `.env` in a text editor and fill in the two values from steps 1 and 2:
-   ```
+   ```bash
    DATABASE_URL=postgresql://... (from step 1)
    GEMINI_API_KEY=... (from step 2)
    ```
-4. Save the file. **Never share this file or commit it to GitHub** — it's
-   already excluded via `.gitignore`, but double-check before pushing.
+4. Save the file. **Never share this file or commit it to GitHub** — it's already excluded via `.gitignore`, but double-check before pushing.
 
-## 5. Create the database table
+## 6. Create the database table
 
 ```bash
 python -m scripts.init_db
@@ -64,28 +79,21 @@ python -m scripts.init_db
 
 Expected output: `Database initialized: 'feedback' table is ready.`
 
-If you get a connection error, double-check your `DATABASE_URL` in `.env` —
-this is the most common mistake (extra spaces, missing `?sslmode=require`).
+If you get a connection error, double-check your `DATABASE_URL` in `.env` — this is the most common mistake (extra spaces, missing `?sslmode=require`).
 
-## 6. Run the pipeline (generate data + classify + load)
+## 7. Run the pipeline (generate data + classify + load)
 
 ```bash
 python -m scripts.run_pipeline
 ```
 
-This will now be much faster than a naive per-row approach — the
-pipeline batches ~15 rows into each Gemini request, so the full
-~370-row dataset takes roughly **25-30 API requests total**, finishing
-in a couple of minutes rather than 30+.
+The pipeline batches ~15 rows into each Gemini request, so the full ~370-row dataset takes roughly **25-30 API requests total**, finishing in a couple of minutes rather than 30+.
 
-**Tip: test with a smaller batch first.** Before running the full
-pipeline, confirm everything works end-to-end with a quick run:
+**Tip: test with a smaller batch first.** Before running the full pipeline, confirm everything works end-to-end with a quick run:
 ```bash
 python -m scripts.run_pipeline --rows 20 --spike 8
 ```
-This finishes in well under a minute and still includes a spike, so
-you can check the dashboard and anomaly detection work before
-committing to the full run.
+This finishes in well under a minute and still includes a spike, so you can check the dashboard and anomaly detection work before committing to the full run.
 
 Once you're ready for the real dataset:
 ```bash
@@ -93,49 +101,73 @@ python -m scripts.run_pipeline
 ```
 
 This will:
-- Generate ~370 pieces of mock feedback (including a seeded "spike" of
-  payment-failure complaints)
-- Send each one to Gemini for classification (this takes a few minutes —
-  it's calling the AI once per row)
+- Generate ~370 pieces of mock feedback (including a seeded "spike" of payment-failure complaints)
+- Send each one to Gemini for classification
 - Load everything into your Neon database
 
-You'll see progress logs like `-> classified 25/372`. When it finishes,
-you'll see `Done. 372 rows loaded into the 'feedback' table.`
+You'll see progress logs like `-> classified 25/372`. When it finishes, you'll see `Done. 372 rows loaded into the 'feedback' table.`
 
-**Tip:** you can re-run this command any time — it always clears old data
-first, so you never end up with duplicates.
+**Tip:** you can re-run this command any time — it always clears old data first, so you never end up with duplicates.
 
-## 7. Launch the dashboard
+---
+
+## 8. Launch the Application
+
+### Option A: Modern React + FastAPI Dashboard (Recommended)
+
+Run the unified runner from the project root:
+
+```bash
+python run_app.py
+```
+
+This automatically launches both services:
+- **Frontend Dashboard (React + Tailwind + Recharts)**: http://localhost:5173
+- **Backend REST API (FastAPI)**: http://127.0.0.1:8001
+- **API Interactive Swagger Docs**: http://127.0.0.1:8001/docs
+
+#### Running Services Separately (Optional):
+If you prefer running them in separate terminal windows:
+```bash
+# Terminal 1 - Backend API:
+python -m uvicorn server:app --host 127.0.0.1 --port 8001 --reload
+
+# Terminal 2 - Frontend:
+cd frontend
+npm run dev
+```
+
+### Option B: Legacy Streamlit Prototype
+
+If you want to view the standalone Streamlit prototype:
 
 ```bash
 streamlit run app.py
 ```
 
-This should automatically open a browser tab at `http://localhost:8501`.
-You should see:
-- KPI cards at the top (total feedback, bugs reported, etc.)
-- An "Anomaly Alerts" section — this should show **1 detected spike**
-  about the seeded payment-failure complaints
-- A filterable table of all feedback, ranked by priority
-- A "Download as CSV" button at the bottom
+This opens `http://localhost:8501`.
+
+---
 
 ## Troubleshooting
 
-| Problem | Likely cause |
-|---|---|
-| `Missing required environment variables` | `.env` file missing or not filled in correctly |
-| `404 ... model not found for API version` | The app should now auto-fallback to a working model and just log a warning — if you still see a hard failure, every fallback candidate is unavailable; check https://ai.google.dev/gemini-api/docs/models and set `GEMINI_MODEL=` in your `.env` to a current name |
-| `429 ... exceeded your current quota` | Normal on the free tier if you're going too fast — much rarer now that requests are batched. If it keeps happening, lower `GEMINI_RPM` or `GEMINI_BATCH_SIZE` in `.env` |
-| Connection refused / timeout on `init_db` | Wrong `DATABASE_URL`, or Neon project is paused (free tier auto-pauses when idle — just wait a few seconds and retry) |
-| Pipeline is very slow | Normal — it's one Gemini API call per row. ~370 rows takes a few minutes |
-| Dashboard shows "No feedback data found" | You haven't run `run_pipeline` yet, or it failed partway — check the terminal logs |
-| `ModuleNotFoundError` | You forgot to activate the virtual environment (`source venv/bin/activate`) before running commands |
+| Problem | Likely cause | Solution |
+|---|---|---|
+| `Missing required environment variables` | `.env` file missing or not filled in correctly | Ensure `.env` exists in the root folder with `DATABASE_URL` and `GEMINI_API_KEY`. |
+| `npm: command not found` | Node.js is not installed | Install Node.js LTS (v18+) from https://nodejs.org. |
+| `404 ... model not found for API version` | Fallback candidate unavailable | The app auto-fallbacks models; verify https://ai.google.dev/gemini-api/docs/models and set `GEMINI_MODEL=` in `.env` if needed. |
+| `429 ... exceeded your current quota` | Normal on free tier with frequent calls | Rate limiter will automatically pause. You can lower `GEMINI_RPM` or `GEMINI_BATCH_SIZE` in `.env`. |
+| Connection refused / timeout on `init_db` | Wrong `DATABASE_URL` or paused Neon branch | Check `DATABASE_URL` format. Neon free tier pauses when idle — wait 5 seconds and retry. |
+| Dashboard shows "No feedback data found" | `run_pipeline` hasn't been run yet | Run `python -m scripts.run_pipeline` to generate and seed data. |
+| `ModuleNotFoundError` | Virtual environment not active | Activate virtual environment (`venv\Scripts\activate` on Windows or `source venv/bin/activate` on Mac/Linux). |
+| Vite proxy error `ECONNREFUSED 127.0.0.1:8001` | Backend FastAPI server is not running | Ensure `server.py` is running on port 8001 (or use `python run_app.py`). |
 
-## Running the tests (optional, but good practice)
+---
+
+## Running the Unit Tests
 
 ```bash
 python -m pytest tests/ -v
 ```
 
-This doesn't need your `.env` filled in — the tests use fake data and don't
-call the database or Gemini.
+This runs all 20 business logic unit tests (Priority Engine, Anomaly Detector, and Metrics). The tests use synthetic data fixtures and do not require external DB or Gemini connections.
