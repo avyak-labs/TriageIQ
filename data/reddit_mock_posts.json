@@ -1,0 +1,62 @@
+[
+  {
+    "source": "reddit",
+    "external_id": "reddit_t3_sw01",
+    "raw_text": "UPI payment deducted but order failed on Swiggy - Money debited from GPay via UPI but order status shows cancelled. Customer support bot says no order found!",
+    "created_at": "2026-09-28T12:05:00+00:00"
+  },
+  {
+    "source": "reddit",
+    "external_id": "reddit_t3_sw02",
+    "raw_text": "Checkout screen freezes on UPI PIN step - Every time I select PhonePe UPI the screen goes black and the app restarts.",
+    "created_at": "2026-09-28T12:12:00+00:00"
+  },
+  {
+    "source": "reddit",
+    "external_id": "reddit_t3_sw03",
+    "raw_text": "Delivery address reset bug - Anyone else having their saved addresses wiped out after the latest v14.2 update? Had to re-enter everything.",
+    "created_at": "2026-09-28T12:18:00+00:00"
+  },
+  {
+    "source": "reddit",
+    "external_id": "reddit_t3_sw04",
+    "raw_text": "Payment gateway timed out during checkout with UPI - Tried twice, both payments failed at gateway level.",
+    "created_at": "2026-09-28T12:25:00+00:00"
+  },
+  {
+    "source": "reddit",
+    "external_id": "reddit_t3_sw05",
+    "raw_text": "Double deduction for single order - Order ID 89271 charged my account twice. Need urgent refund.",
+    "created_at": "2026-09-28T12:30:00+00:00"
+  },
+  {
+    "source": "reddit",
+    "external_id": "reddit_t3_px01",
+    "raw_text": "Pixel 8 Camera app crashing after Android 15 patch - Whenever I switch to Night Sight the viewfinder stutters and crashes.",
+    "created_at": "2026-09-28T11:40:00+00:00"
+  },
+  {
+    "source": "reddit",
+    "external_id": "reddit_t3_px02",
+    "raw_text": "Battery drain overnight on standby - Losing 25% battery overnight with AOD turned off. Android System battery usage is at 45%.",
+    "created_at": "2026-09-28T10:15:00+00:00"
+  },
+  {
+    "source": "reddit",
+    "external_id": "reddit_t3_px03",
+    "raw_text": "Feature Request: Add manual toggle for auto-macro mode - Macro mode triggers way too aggressively when taking documents.",
+    "created_at": "2026-09-28T09:30:00+00:00"
+  },
+  {
+    "source": "reddit",
+    "external_id": "reddit_t3_sw06",
+    "raw_text": "Awesome food delivery speed today - 15 minutes flat during rain. Kudos to the delivery partner!",
+    "created_at": "2026-09-28T08:50:00+00:00"
+  },
+  {
+    "source": "reddit",
+    "external_id": "reddit_t3_sw07",
+    "raw_text": "Delivery executive was polite and quick - Great customer experience today with Swiggy Instamart.",
+    "created_at": "2026-09-28T08:20:00+00:00"
+  }
+]

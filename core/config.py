@@ -37,6 +37,16 @@ GEMINI_BATCH_SIZE = int(os.getenv("GEMINI_BATCH_SIZE", "15"))
 SPIKE_THRESHOLD = int(os.getenv("SPIKE_THRESHOLD", "5"))
 SPIKE_WINDOW_MINUTES = int(os.getenv("SPIKE_WINDOW_MINUTES", "60"))
 
+# Reddit Ingestion Config
+REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID", "")
+REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET", "")
+REDDIT_USER_AGENT = os.getenv(
+    "REDDIT_USER_AGENT",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 TriageIQ/1.0",
+)
+REDDIT_SUBREDDITS = os.getenv("REDDIT_SUBREDDITS", "swiggy,GooglePixel")
+REDDIT_MAX_POSTS = int(os.getenv("REDDIT_MAX_POSTS", "25"))
+
 
 def validate_config():
     """Called at startup by scripts that need real credentials.

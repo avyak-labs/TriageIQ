@@ -10,7 +10,9 @@ complaints, and surfaces a prioritized, actionable roadmap on a dashboard.
 ## How it works
 
 ```
-Mock feedback data
+Feedback Sources:
+  • Mock synthetic generator (data/mock_data_generator.py)
+  • Live Reddit subreddits (core/ingestion/reddit_collector.py - Zero-Auth RSS / PRAW)
         │
         ▼
   clean_text()            core/preprocessing.py   (strips HTML, URLs, emojis, noise)
@@ -25,7 +27,7 @@ compute_priority_scores() core/priority_engine.py (ranks by urgency × volume)
      Postgres (Neon)      core/database.py
         │
         ▼
-  Streamlit dashboard      app.py                  (KPIs, filters, spike alerts, CSV export)
+  FastAPI (:8001) / Streamlit dashboard (KPIs, filters, spike alerts, CSV export)
         ▲
         │
    detect_spikes()        core/anomaly_detector.py (flags complaint clusters → auto-tickets)
@@ -36,8 +38,10 @@ compute_priority_scores() core/priority_engine.py (ranks by urgency × volume)
 ```
 triageiq/
 ├── .streamlit/config.toml      Dark theme
-├── app.py                      Streamlit dashboard (the only frontend)
-├── core/                       All logic — plain Python, no framework
+├── app.py                      Streamlit dashboard prototype
+├── server.py                   FastAPI backend (:8001)
+├── frontend/                   React 19 + Vite dashboard (:5173)
+├── core/                       All logic — plain Python, modular
 │   ├── config.py                 Loads .env
 │   ├── database.py                DB connection + read/write helpers
 │   ├── models.py                   Table schema (single 'feedback' table)
@@ -45,14 +49,17 @@ triageiq/
 │   ├── ai_classifier.py            Gemini classification (batched) + ticket titles
 │   ├── priority_engine.py          Priority scoring/ranking
 │   ├── anomaly_detector.py         Spike detection → ticket generation
-│   └── metrics.py                  Dashboard KPIs, baselines, chart aggregates
+│   ├── metrics.py                  Dashboard KPIs, baselines, chart aggregates
+│   └── ingestion/                  Live platform data adapters
+│       └── reddit_collector.py       Dual-mode Reddit collector (Zero-Auth RSS + PRAW)
 ├── data/
 │   ├── mock_data_generator.py    Generates synthetic feedback + a seeded spike
+│   ├── reddit_mock_posts.json    Curated high-signal fallback posts for r/swiggy, etc.
 │   └── sample_feedback.csv       A pre-generated sample (for reference)
 ├── scripts/
 │   ├── init_db.py                Creates the DB table
-│   └── run_pipeline.py           One command: generate → batch-classify → load
-└── tests/                       Unit tests for the pure core/ logic
+│   └── run_pipeline.py           One command: ingest (mock or reddit) → batch-classify → load
+└── tests/                       25/25 Unit tests for core logic & collectors
 ```
 
 ## Quick start
@@ -62,9 +69,10 @@ See **SETUP.md** for the full step-by-step walkthrough (Neon DB, Gemini key, etc
 Once set up:
 
 ```bash
-python -m scripts.init_db          # create the table (once)
-python -m scripts.run_pipeline     # generate mock data, classify, load into DB
-streamlit run app.py               # launch the dashboard
+python -m scripts.init_db                                              # create the table (once)
+python -m scripts.run_pipeline                                         # generate mock data, classify, load
+python -m scripts.run_pipeline --source reddit --subreddits swiggy      # or ingest live Reddit posts!
+python run_app.py                                                      # launch React UI (:5173) + FastAPI (:8001)
 ```
 
 ## Running tests
@@ -73,28 +81,19 @@ streamlit run app.py               # launch the dashboard
 python -m pytest tests/ -v
 ```
 
-Tests cover `priority_engine.py` and `anomaly_detector.py` with synthetic data —
-no database or API key required to run them.
+All 25 unit tests pass locally without external network or DB dependencies:
+- `test_anomaly_detector.py` (7 tests)
+- `test_metrics.py` (8 tests)
+- `test_priority_engine.py` (5 tests)
+- `test_reddit_collector.py` (5 tests)
 
 ## Design decisions
 
-- **One app, not client/server.** Streamlit calls `core/` functions directly.
-  No API layer, no running two processes — easier to read top to bottom.
+- **Dual-Mode Resilient Ingestion.** Reddit's new Responsible Builder Policy blocks self-serve API keys for student/hobby projects. TriageIQ circumvents this by consuming public Atom/RSS feeds directly with **zero credentials needed**, falling back to PRAW if keys exist, and serving curated seed data if rate-limited.
+- **One app or decoupled API.** Run unified via `run_app.py` (FastAPI + React 19) or standalone via Streamlit (`app.py`).
 - **One table.** Kept flat on purpose; no joins to reason about.
-- **Idempotent pipeline.** `run_pipeline.py` clears the table before reinserting,
-  so re-running it never creates duplicates.
-- **Batched AI calls.** ~15 rows go into a single Gemini request instead of
-  one call per row — a full run is ~25 requests instead of ~370, which is
-  both far faster and much friendlier to the free-tier daily quota.
-- **Never crashes on bad AI output.** `ai_classifier.py` retries once, then
-  falls back to a safe default rather than stopping the whole batch.
-- **Self-healing model selection.** If the configured Gemini model becomes
-  unavailable, the classifier automatically tries a short list of current
-  fallbacks rather than hard-failing — Google has changed model
-  availability several times during this project's development.
-- **AI calls stay out of the pure logic.** `priority_engine.py` and
-  `anomaly_detector.py` never touch the network or the database — they're
-  plain functions over DataFrames, which is what makes them easy to unit
-  test. The one AI-enrichment step in the dashboard (generating a specific
-  title for a detected spike) lives in `ai_classifier.py` and is called
-  from `app.py`, not from inside the detection logic itself.
+- **Idempotent pipeline.** `run_pipeline.py` clears the table before reinserting (or accepts `--append` to keep accumulating).
+- **Batched AI calls.** ~15 rows go into a single Gemini request instead of one call per row — a full run is ~25 requests instead of ~370, which is both far faster and much friendlier to the free-tier daily quota.
+- **Never crashes on bad AI output.** `ai_classifier.py` retries once, then falls back to a safe default rather than stopping the whole batch.
+- **Self-healing model selection.** If the configured Gemini model becomes unavailable, the classifier automatically tries a short list of current fallbacks rather than hard-failing.
+- **AI calls stay out of the pure logic.** `priority_engine.py` and `anomaly_detector.py` never touch the network or the database — they're plain functions over DataFrames, which makes them fast and testable.

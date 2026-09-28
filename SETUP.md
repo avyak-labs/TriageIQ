@@ -81,13 +81,24 @@ Expected output: `Database initialized: 'feedback' table is ready.`
 
 If you get a connection error, double-check your `DATABASE_URL` in `.env` — this is the most common mistake (extra spaces, missing `?sslmode=require`).
 
-## 7. Run the pipeline (generate data + classify + load)
+## 7. Run the pipeline (mock data OR live Reddit data)
 
+### Option 1: Live Reddit Ingestion (Zero Credentials Needed)
+TriageIQ connects directly to live subreddits (e.g. `r/swiggy`, `r/GooglePixel`) via official Atom/RSS feeds:
 ```bash
-python -m scripts.run_pipeline
+python -m scripts.run_pipeline --source reddit --subreddits "swiggy,GooglePixel" --rows 25
+```
+To append newly ingested Reddit posts without clearing existing data in the table, pass `--append`:
+```bash
+python -m scripts.run_pipeline --source reddit --subreddits "swiggy" --append
 ```
 
-The pipeline batches ~15 rows into each Gemini request, so the full ~370-row dataset takes roughly **25-30 API requests total**, finishing in a couple of minutes rather than 30+.
+### Option 2: Synthetic Mock Data Ingestion (Default)
+```bash
+python -m scripts.run_pipeline --source mock --rows 350 --spike 22
+```
+
+The pipeline batches ~15 rows into each Gemini request, so a full ~370-row dataset takes roughly **25-30 API requests total**, finishing in a couple of minutes rather than 30+.
 
 **Tip: test with a smaller batch first.** Before running the full pipeline, confirm everything works end-to-end with a quick run:
 ```bash
@@ -95,19 +106,9 @@ python -m scripts.run_pipeline --rows 20 --spike 8
 ```
 This finishes in well under a minute and still includes a spike, so you can check the dashboard and anomaly detection work before committing to the full run.
 
-Once you're ready for the real dataset:
-```bash
-python -m scripts.run_pipeline
-```
-
-This will:
-- Generate ~370 pieces of mock feedback (including a seeded "spike" of payment-failure complaints)
-- Send each one to Gemini for classification
-- Load everything into your Neon database
-
 You'll see progress logs like `-> classified 25/372`. When it finishes, you'll see `Done. 372 rows loaded into the 'feedback' table.`
 
-**Tip:** you can re-run this command any time — it always clears old data first, so you never end up with duplicates.
+**Tip:** you can re-run this command any time — by default it clears old data first, so you never end up with duplicates (unless `--append` is specified).
 
 ---
 
@@ -170,4 +171,4 @@ This opens `http://localhost:8501`.
 python -m pytest tests/ -v
 ```
 
-This runs all 20 business logic unit tests (Priority Engine, Anomaly Detector, and Metrics). The tests use synthetic data fixtures and do not require external DB or Gemini connections.
+This runs all 25 business logic and collector unit tests (Priority Engine, Anomaly Detector, Metrics, and Reddit Collector). The tests use synthetic fixtures and mock HTTP stubs and do not require external DB or Gemini connections.

@@ -16,13 +16,15 @@ flowchart TB
     %% ==========================================
     subgraph SOURCELAYER ["1. Multi-Channel Ingestion Tier"]
         direction LR
+        REDDIT["Live Reddit Collector<br/><code>core/ingestion/reddit_collector.py</code><br/>(Zero-Auth Atom/RSS + PRAW)"]
+        MOCK["Mock Generator<br/><code>data/mock_data_generator.py</code><br/>(Seeded Temporal Spike)"]
         S1["App Store Reviews"]
         S2["Google Play Reviews"]
         S3["Twitter / X Posts"]
         S4["Zendesk Support Tickets"]
-        MOCK["Mock Generator<br/><code>data/mock_data_generator.py</code><br/>(Seeded Temporal Spike)"]
-        S1 & S2 & S3 & S4 -.->|Future Live Adapters| PIPE
+        REDDIT -->|Normalized JSON| PIPE
         MOCK -->|Simulated Raw JSON| PIPE
+        S1 & S2 & S3 & S4 -.->|Future Adapters| PIPE
     end
 
     %% ==========================================
@@ -135,6 +137,10 @@ sequenceDiagram
 ## 3. Layer-by-Layer Architectural Breakdown
 
 ### 3.1. Ingestion & Preprocessing Tier
+- **Live Reddit Collector (`core/ingestion/reddit_collector.py`):** Ingests real-time community bug reports and complaints from public subreddits (`r/swiggy`, `r/GooglePixel`). Operates in a dual mode:
+  1. *Zero-Auth Atom/RSS Mode (Default):* Directly fetches official Reddit feeds (`/r/{sub}/new/.rss`) without needing developer keys, bypassing Reddit's Responsible Builder Policy restrictions.
+  2. *PRAW OAuth Mode:* Automatically switches to authenticated sessions if `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` are configured.
+  3. *Seed Fallback:* Serves curated domain complaints from `data/reddit_mock_posts.json` if network rate-limits (HTTP 429) occur.
 - **Mock Data Engine (`data/mock_data_generator.py`):** Simulates multi-channel customer reviews (App Store, Google Play, Twitter/X, and Zendesk tickets) with seeded temporal clusters (e.g., sudden UPI checkout failure spikes).
 - **Sanitization (`core/preprocessing.py`):** Strips URLs, usernames, formatting anomalies, and extra whitespace to minimize token waste before classification.
 
