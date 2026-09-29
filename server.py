@@ -76,9 +76,9 @@ def get_metadata():
         "subtitle": "Aggregated from App Store, Play Store, Twitter & Support Tickets",
         "last_synced": datetime.datetime.now().strftime("%b %d, %Y · %H:%M"),
         "time_windows": [
-            {"label": "Last 24 Hours", "hours": 24},
+            {"label": "All Time", "hours": 720},
             {"label": "Last 7 Days", "hours": 168},
-            {"label": "All Time", "hours": 720}
+            {"label": "Last 24 Hours", "hours": 24},
         ],
         "categories": categories,
         "sentiments": sentiments,
@@ -88,7 +88,7 @@ def get_metadata():
 
 
 @app.get("/api/kpis")
-def get_kpis(hours: int = Query(24, description="Time window in hours")):
+def get_kpis(hours: int = Query(720, description="Time window in hours")):
     """Computes the 4 top KPI cards matching Figma wireframe."""
     df = fetch_all_feedback()
     if df.empty:
@@ -126,7 +126,7 @@ def get_kpis(hours: int = Query(24, description="Time window in hours")):
 
 
 @app.get("/api/charts")
-def get_charts(hours: int = Query(24, description="Time window in hours")):
+def get_charts(hours: int = Query(720, description="Time window in hours")):
     """Returns data for the 3 visual charts matching Figma wireframe."""
     df = fetch_all_feedback()
     if df.empty:
@@ -159,7 +159,9 @@ def get_charts(hours: int = Query(24, description="Time window in hours")):
 
         peak_idx = vol_df["count"].idxmax()
         peak = vol_df.loc[peak_idx]
-        if baseline > 0 and peak["count"] > baseline * 1.5:
+        # Require a minimum absolute volume threshold (at least 3 items in that hour)
+        # to prevent single isolated reports in sparse periods from falsely flagging a "+500% spike"
+        if baseline > 0 and peak["count"] >= 3 and peak["count"] > baseline * 1.5:
             pct = round((peak["count"] - baseline) / baseline * 100)
             peak_time = peak["hour"].strftime("%H:%M") if hasattr(peak["hour"], "strftime") else str(peak["hour"])
             spike_annotation = {
@@ -287,6 +289,7 @@ def get_feedback(
     sentiment: Optional[str] = Query(None),
     source: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    hours: Optional[int] = Query(None, description="Optional time window in hours"),
     page: int = Query(1, ge=1),
     limit: int = Query(25, ge=1, le=200)
 ):
@@ -296,6 +299,11 @@ def get_feedback(
         return {"items": [], "total": 0, "page": page, "limit": limit, "total_pages": 0}
 
     ranked = rank_feedback(df)
+
+    if hours:
+        ranked["_created_dt"] = pd.to_datetime(ranked["created_at"])
+        window_start = ranked["_created_dt"].max() - pd.Timedelta(hours=hours)
+        ranked = ranked[ranked["_created_dt"] >= window_start]
 
     if category:
         ranked = ranked[ranked["category"] == category]
@@ -351,7 +359,8 @@ def export_csv(
     category: Optional[str] = Query(None),
     sentiment: Optional[str] = Query(None),
     source: Optional[str] = Query(None),
-    search: Optional[str] = Query(None)
+    search: Optional[str] = Query(None),
+    hours: Optional[int] = Query(None, description="Optional time window in hours")
 ):
     """Exports prioritized feedback directly as CSV."""
     df = fetch_all_feedback()
@@ -359,6 +368,11 @@ def export_csv(
         raise HTTPException(status_code=404, detail="No feedback data to export")
 
     ranked = rank_feedback(df)
+    if hours:
+        ranked["_created_dt"] = pd.to_datetime(ranked["created_at"])
+        window_start = ranked["_created_dt"].max() - pd.Timedelta(hours=hours)
+        ranked = ranked[ranked["_created_dt"] >= window_start]
+
     if category:
         ranked = ranked[ranked["category"] == category]
     if sentiment:

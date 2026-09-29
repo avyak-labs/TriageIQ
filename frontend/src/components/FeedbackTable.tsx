@@ -3,17 +3,18 @@ import { useState, useEffect, useCallback } from 'react'
 import { Search, Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import { api } from '../api'
 import { CategoryPill, SentimentDot } from './Badges'
-import type { FeedbackResponse } from '../types'
+import type { FeedbackResponse, TimeWindow } from '../types'
 
 interface FeedbackTableProps {
   categories: string[]
   sentiments: string[]
   sources: string[]
+  selectedWindow?: TimeWindow
 }
 
 const PAGE_SIZE = 25
 
-export function FeedbackTable({ categories, sentiments, sources }: FeedbackTableProps) {
+export function FeedbackTable({ categories, sentiments, sources, selectedWindow }: FeedbackTableProps) {
   const [data, setData] = useState<FeedbackResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -21,6 +22,7 @@ export function FeedbackTable({ categories, sentiments, sources }: FeedbackTable
   const [selectedCategory, setSelectedCategory] = useState('')
   const [selectedSentiment, setSelectedSentiment] = useState('')
   const [selectedSource, setSelectedSource] = useState('')
+  const [filterByWindow, setFilterByWindow] = useState(false)
   const [page, setPage] = useState(1)
 
   // Debounce search input (300ms)
@@ -30,7 +32,9 @@ export function FeedbackTable({ categories, sentiments, sources }: FeedbackTable
   }, [search])
 
   // Reset to page 1 when filters change
-  useEffect(() => setPage(1), [debouncedSearch, selectedCategory, selectedSentiment, selectedSource])
+  useEffect(() => setPage(1), [debouncedSearch, selectedCategory, selectedSentiment, selectedSource, filterByWindow, selectedWindow])
+
+  const activeHours = filterByWindow && selectedWindow ? selectedWindow.hours : undefined
 
   const load = useCallback(async () => {
     setIsLoading(true)
@@ -40,6 +44,7 @@ export function FeedbackTable({ categories, sentiments, sources }: FeedbackTable
         sentiment: selectedSentiment || undefined,
         source: selectedSource || undefined,
         search: debouncedSearch || undefined,
+        hours: activeHours,
         page,
         limit: PAGE_SIZE,
       })
@@ -49,7 +54,7 @@ export function FeedbackTable({ categories, sentiments, sources }: FeedbackTable
     } finally {
       setIsLoading(false)
     }
-  }, [selectedCategory, selectedSentiment, selectedSource, debouncedSearch, page])
+  }, [selectedCategory, selectedSentiment, selectedSource, debouncedSearch, activeHours, page])
 
   useEffect(() => { load() }, [load])
 
@@ -58,6 +63,7 @@ export function FeedbackTable({ categories, sentiments, sources }: FeedbackTable
     sentiment: selectedSentiment || undefined,
     source: selectedSource || undefined,
     search: debouncedSearch || undefined,
+    hours: activeHours,
   })
 
   const friendlySource = (raw: string) =>
@@ -75,7 +81,9 @@ export function FeedbackTable({ categories, sentiments, sources }: FeedbackTable
         <div>
           <h2 className="text-base font-semibold text-white">Prioritized Feedback Backlog</h2>
           {data && (
-            <p className="text-xs text-gray-500 mt-0.5">{data.total.toLocaleString()} items · ranked by AI priority score</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {data.total.toLocaleString()} items {filterByWindow && selectedWindow ? `(${selectedWindow.label})` : '(All Records)'} · ranked by AI priority score
+            </p>
           )}
         </div>
         <a
@@ -132,10 +140,26 @@ export function FeedbackTable({ categories, sentiments, sources }: FeedbackTable
           {sources.map((s) => <option key={s} value={s}>{friendlySource(s)}</option>)}
         </select>
 
-        {/* Clear filters */}
-        {(selectedCategory || selectedSentiment || selectedSource || debouncedSearch) && (
+        {/* Window Sync Filter toggle */}
+        {selectedWindow && (
           <button
-            onClick={() => { setSelectedCategory(''); setSelectedSentiment(''); setSelectedSource(''); setSearch('') }}
+            type="button"
+            onClick={() => setFilterByWindow(!filterByWindow)}
+            className={`px-3 py-2 rounded-lg text-xs border transition-colors cursor-pointer ${
+              filterByWindow
+                ? 'bg-brand-primary/20 border-brand-primary/50 text-brand-primary font-medium'
+                : 'bg-surface border-surface-border text-gray-400 hover:text-white hover:border-surface-borderLight'
+            }`}
+            title="Toggle whether the table is filtered by the active time window"
+          >
+            {filterByWindow ? `Window: ${selectedWindow.label}` : 'Window: Off'}
+          </button>
+        )}
+
+        {/* Clear filters */}
+        {(selectedCategory || selectedSentiment || selectedSource || debouncedSearch || filterByWindow) && (
+          <button
+            onClick={() => { setSelectedCategory(''); setSelectedSentiment(''); setSelectedSource(''); setSearch(''); setFilterByWindow(false) }}
             className="text-xs text-gray-500 hover:text-gray-300 px-2 py-2 rounded-lg hover:bg-surface-hover transition-colors"
           >
             Clear

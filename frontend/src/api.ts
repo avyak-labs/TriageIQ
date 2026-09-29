@@ -31,6 +31,7 @@ export const api = {
     sentiment?: string
     source?: string
     search?: string
+    hours?: number
     page?: number
     limit?: number
   }) => {
@@ -39,6 +40,7 @@ export const api = {
     if (params.sentiment) q.set('sentiment', params.sentiment)
     if (params.source) q.set('source', params.source)
     if (params.search) q.set('search', params.search)
+    if (params.hours) q.set('hours', String(params.hours))
     if (params.page) q.set('page', String(params.page))
     if (params.limit) q.set('limit', String(params.limit))
     return get<FeedbackResponse>(`/feedback?${q}`)
@@ -50,12 +52,14 @@ export const api = {
     sentiment?: string
     source?: string
     search?: string
+    hours?: number
   }) => {
     const q = new URLSearchParams()
     if (params.category) q.set('category', params.category)
     if (params.sentiment) q.set('sentiment', params.sentiment)
     if (params.source) q.set('source', params.source)
     if (params.search) q.set('search', params.search)
+    if (params.hours) q.set('hours', String(params.hours))
     return `${BASE}/export-csv?${q}`
   },
 }

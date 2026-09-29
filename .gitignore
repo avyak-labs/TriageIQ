@@ -8,6 +8,7 @@ __pycache__/
 venv/
 .venv/
 *.egg-info/
+data/reddit_checkpoint.json
 
 # Frontend
 node_modules/

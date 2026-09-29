@@ -9,7 +9,7 @@ import { FeedbackTable } from './components/FeedbackTable'
 import type { KpiResponse, ChartsResponse, AnomaliesResponse, MetadataResponse, TimeWindow } from './types'
 import './App.css'
 
-const DEFAULT_WINDOW: TimeWindow = { label: 'Last 24 Hours', hours: 24 }
+const DEFAULT_WINDOW: TimeWindow = { label: 'All Time', hours: 720 }
 
 export default function App() {
   const [metadata, setMetadata] = useState<MetadataResponse | null>(null)
@@ -138,6 +138,7 @@ export default function App() {
           categories={metadata?.categories ?? []}
           sentiments={metadata?.sentiments ?? ['Negative', 'Neutral', 'Positive']}
           sources={metadata?.sources ?? []}
+          selectedWindow={selectedWindow}
         />
 
         {/* Footer */}
